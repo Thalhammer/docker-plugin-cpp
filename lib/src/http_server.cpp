@@ -1,7 +1,8 @@
 #include "http_server.h"
+#include <algorithm>
 
 namespace docker_plugin {
-	llhttp_settings_t http_connection::get_settings() {
+	llhttp_settings_t http_connection::get_settings() noexcept {
 		llhttp_settings_t s{};
 		llhttp_settings_init(&s);
 		s.on_message_begin = [](llhttp_t* s) -> int {
@@ -24,7 +25,10 @@ namespace docker_plugin {
 		s.on_header_field_complete = [](llhttp_t* s) -> int {
 			auto o = static_cast<http_connection*>(s->data);
 			auto res = o->on_header_field(o->m_buffer);
-			if (o->m_buffer_headers) o->m_current_header = o->m_headers.emplace(o->m_buffer, "");
+			if (o->m_buffer_headers) {
+				std::transform(o->m_buffer.begin(), o->m_buffer.end(), o->m_buffer.begin(), ::tolower);
+				o->m_current_header = o->m_headers.raw().emplace(std::move(o->m_buffer), "");
+			}
 			o->m_buffer.clear();
 			return res;
 		};
@@ -35,7 +39,7 @@ namespace docker_plugin {
 		s.on_header_value_complete = [](llhttp_t* s) -> int {
 			auto o = static_cast<http_connection*>(s->data);
 			auto res = o->on_header_value(o->m_buffer);
-			if (o->m_buffer_headers && o->m_current_header != o->m_headers.end())
+			if (o->m_buffer_headers && o->m_current_header != o->m_headers.raw().end())
 				o->m_current_header->second = o->m_buffer;
 			o->m_buffer.clear();
 			return res;
@@ -136,11 +140,9 @@ namespace docker_plugin {
 
 	void http_connection::on_read(const void* data, size_t len) {
 		auto res = llhttp_execute(&m_parser, reinterpret_cast<const char*>(data), len);
-		if (res == HPE_OK) {
-			// Parsing ok
-		} else {
+		if (res != HPE_OK) {
 			fprintf(stderr, "error parsing http request: %s %s\n", llhttp_errno_name(res), m_parser.reason);
-			// TODO: Close
+			this->close();
 		}
 	}
 
@@ -150,7 +152,7 @@ namespace docker_plugin {
 		m_parser.data = this;
 	}
 
-	void http_connection::set_status(int status, const std::string& msg) {
+	void http_connection::response_status(int status, const std::string& msg) {
 		m_response_status = status;
 		if (msg.empty()) {
 			m_response_message = "OK";
@@ -161,32 +163,73 @@ namespace docker_plugin {
 			m_response_message = msg;
 	}
 
-	void http_connection::set_header(const std::string& key, const std::string& value, bool replace) {
-		if (replace) m_response_headers.erase(key);
-		m_response_headers.emplace(key, value);
-	}
-
 	void http_connection::send_headers() {
 		if (m_response_headers_sent) return;
-		std::string headers = "HTTP/1.0 " + std::to_string(m_response_status) + " " + m_response_message + "\r\n";
-		for (auto& e : m_response_headers) {
+		std::string headers = "HTTP/1.1 " + std::to_string(m_response_status) + " " + m_response_message + "\r\n";
+		for (auto& e : m_response_headers.raw()) {
 			headers += e.first + ": " + e.second + "\r\n";
 		}
 		headers += "\r\n";
 		this->write(headers.data(), headers.size());
 		m_response_headers_sent = true;
+		if (m_response_headers.get("transfer-encoding") == "chunked") m_response_chunked = true;
+
 		m_response_message.clear();
 		m_response_message.shrink_to_fit();
-		m_response_headers.clear();
+		m_response_headers.raw().clear();
 	}
 
 	void http_connection::send_data(const void* data, size_t len) {
-		this->send_headers();
-		this->write(data, len);
+		if (!m_response_headers_sent) {
+			if (!response_headers().has("content-length") && !response_headers().has("transfer-encoding")) {
+				response_headers().set("transfer-encoding", "chunked");
+			}
+			this->send_headers();
+		}
+		if (m_response_chunked) {
+			while (len != 0) {
+				uint32_t small_len = std::min<size_t>(len, UINT16_MAX);
+				char len_buf[16];
+				int r = snprintf(len_buf, sizeof(len_buf), "%x\r\n", static_cast<unsigned int>(small_len));
+				this->write(len_buf, r);
+				this->write(data, small_len);
+				this->write("\r\n", 2);
+				len -= small_len;
+			}
+		} else {
+			this->write(data, len);
+		}
 	}
 
 	void http_connection::end() {
-		//this->close();
+		if (!m_response_headers_sent) {
+			if (!response_headers().has("content-length"))
+				response_headers().set("content-length", "0");
+			send_headers();
+		}
+		if (m_response_chunked) {
+			this->write("0\r\n\r\n", 5);
+		}
+
+		// Clean up state and reset everything
+		m_buffer.clear();
+		m_buffer_body = false;
+		m_buffer_headers = false;
+		m_headers.clear();
+		m_current_header = {};
+		m_response_status = 200;
+		m_response_message.clear();
+		m_response_headers.clear();
+		m_response_headers_sent = false;
+		m_response_chunked = false;
+	}
+
+	void http_connection::end(const void* data, size_t len) {
+		if (!m_response_headers_sent) {
+			response_headers().set("content-length", std::to_string(len));
+		}
+		send_data(data, len);
+		end();
 	}
 
 } // namespace docker_plugin

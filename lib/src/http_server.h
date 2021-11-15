@@ -1,37 +1,69 @@
 #pragma once
 #include "uds_server.h"
+#include <algorithm>
 #include <llhttp.h>
 #include <unordered_map>
 
 namespace docker_plugin {
+	class http_header_set {
+	public:
+		using collection_type = std::unordered_multimap<std::string, std::string>;
+
+		collection_type& raw() noexcept { return m_headers; }
+		const collection_type& raw() const noexcept { return m_headers; }
+
+		void set(std::string key, std::string value, bool replace = true) {
+			std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+			if (replace) m_headers.erase(key);
+			m_headers.emplace(std::move(key), std::move(value));
+		}
+		const std::string& get(const std::string& key) const noexcept {
+			const static std::string empty{};
+			auto it = m_headers.find(key);
+			if (it == m_headers.end()) return empty;
+			return it->second;
+		}
+		bool has(const std::string& key) const noexcept { return m_headers.count(key) != 0; }
+		std::pair<collection_type::const_iterator, collection_type::const_iterator> get_all(const std::string& key) const noexcept { return m_headers.equal_range(key); }
+		size_t size() const noexcept { return m_headers.size(); }
+		void erase(const std::string& key) { m_headers.erase(key); }
+		void clear() { m_headers.clear(); }
+
+	private:
+		collection_type m_headers{};
+	};
 	class http_connection : public uds_connection {
 		llhttp_t m_parser{};
 		std::string m_buffer{};
 		bool m_buffer_body{false};
 		bool m_buffer_headers{false};
-		std::unordered_multimap<std::string, std::string> m_headers{};
+		http_header_set m_headers{};
 		std::unordered_multimap<std::string, std::string>::iterator m_current_header{};
 
 		int m_response_status{200};
 		std::string m_response_message{"OK"};
-		std::unordered_multimap<std::string, std::string> m_response_headers{};
+		http_header_set m_response_headers{};
 		bool m_response_headers_sent{false};
+		bool m_response_chunked{false};
 
-		static llhttp_settings_t get_settings();
+		static llhttp_settings_t get_settings() noexcept;
 		static llhttp_settings_t g_settings;
 
 	protected:
 		void on_read(const void* data, size_t len) override;
 		void buffer_body() noexcept { m_buffer_body = true; }
 		void buffer_headers() noexcept { m_buffer_headers = true; }
-		const std::unordered_multimap<std::string, std::string>& get_headers() const noexcept { return m_headers; }
-		const std::string& get_body() const noexcept { return m_buffer; }
+		const http_header_set& request_headers() const noexcept { return m_headers; }
+		const std::string& body() const noexcept { return m_buffer; }
 
-		void set_status(int status, const std::string& msg = "");
-		void set_header(const std::string& key, const std::string& value, bool replace = false);
+		void response_status(int status, const std::string& msg = "");
+		http_header_set& response_headers() noexcept { return m_response_headers; }
 		void send_headers();
 		void send_data(const void* data, size_t len);
+		void send_data(const std::string& data) { send_data(data.data(), data.size()); }
 		void end();
+		void end(const void* data, size_t len);
+		void end(const std::string& data) { end(data.data(), data.size()); }
 
 	public:
 		http_connection(int sock);

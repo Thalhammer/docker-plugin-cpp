@@ -20,27 +20,24 @@ namespace docker_plugin {
 
 		template <typename TObject, typename TRequest, typename TResponse>
 		void invoke_plugin_handler(TResponse (TObject::*fn)(const TRequest&), TObject* obj) {
-			this->set_header("Content-Type", "application/vnd.docker.plugins.v1.1+json");
+			response_headers().set("Content-Type", "application/vnd.docker.plugins.v1.1+json");
 			std::string response;
 			try {
-				auto req = from_json<TRequest>(get_body());
+				auto req = from_json<TRequest>(body());
 				auto res = (obj->*fn)(req);
-				this->set_status(200);
+				response_status(200);
 				response = to_json<TResponse>(res);
 			} catch (const error_response& e) {
-				this->set_status(e.status);
+				response_status(e.status);
 				response = to_json<error_response>(e);
 			} catch (const std::invalid_argument& e) {
-				this->set_status(400);
+				response_status(400);
 				response = to_json<error_response>({0, e.what()});
 			} catch (const std::exception& e) {
-				this->set_status(500);
+				response_status(500);
 				response = to_json<error_response>({0, e.what()});
 			}
-			set_header("Connection", "Close");
-			set_header("Content-Length", std::to_string(response.size()));
-			send_data(response.data(), response.size());
-			end();
+			end(response);
 		}
 
 		activate_response plugin_activate(const empty_type&) {
@@ -53,18 +50,15 @@ namespace docker_plugin {
 		plugin_http_connection(int socket, plugin* p)
 			: http_connection{socket}, m_plugin{p}, m_logger{p->m_logger}, m_url{} {}
 		int on_message_begin() noexcept override {
-			this->buffer_headers();
-			this->buffer_body();
+			buffer_headers();
+			buffer_body();
 			return 0;
 		}
 		int on_url(llhttp_method method, const std::string& url) noexcept override {
 			if (method != HTTP_POST) {
 				if (m_logger) m_logger->log(logger::level::warning, "Get a non post request for '" + url + "'");
-				set_status(405);
-				set_header("Connection", "Close");
-				set_header("Content-Length", "18");
-				send_data("Method not allowed", 18);
-				end();
+				response_status(405);
+				end("Method not allowed");
 				return 1;
 			}
 			m_url = url;
@@ -92,11 +86,8 @@ namespace docker_plugin {
 				this->invoke_plugin_handler(&volume::driver::capabilities, m_plugin->m_volume_driver);
 			} else {
 				// TODO: Handle Message
-				set_status(404);
-				set_header("Connection", "Close");
-				set_header("Content-Length", "9");
-				send_data("Not found", 9);
-				end();
+				response_status(404);
+				end("Not found");
 			}
 			return 0;
 		}
