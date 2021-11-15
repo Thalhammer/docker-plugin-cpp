@@ -1,5 +1,7 @@
 #include "docker-plugin-cpp/plugin.h"
+#include "docker-plugin-cpp/ipam/api.h"
 #include "docker-plugin-cpp/logger.h"
+#include "docker-plugin-cpp/network/api.h"
 #include "docker-plugin-cpp/volume/api.h"
 #include "http_server.h"
 #include "serialize.h"
@@ -43,6 +45,7 @@ namespace docker_plugin {
 		activate_response plugin_activate(const empty_type&) {
 			activate_response resp;
 			if (m_plugin->m_volume_driver != nullptr) resp.implements.insert("VolumeDriver");
+			if (m_plugin->m_network_driver != nullptr) resp.implements.insert("NetworkDriver");
 			return resp;
 		}
 
@@ -84,6 +87,46 @@ namespace docker_plugin {
 				this->invoke_plugin_handler(&volume::driver::list, m_plugin->m_volume_driver);
 			} else if (m_plugin->m_volume_driver && m_url == "/VolumeDriver.Capabilities") {
 				this->invoke_plugin_handler(&volume::driver::capabilities, m_plugin->m_volume_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.GetCapabilities") {
+				this->invoke_plugin_handler(&network::driver::capabilities, m_plugin->m_network_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.CreateNetwork") {
+				this->invoke_plugin_handler(&network::driver::create_network, m_plugin->m_network_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.AllocateNetwork") {
+				this->invoke_plugin_handler(&network::driver::allocate_network, m_plugin->m_network_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.DeleteNetwork") {
+				this->invoke_plugin_handler(&network::driver::delete_network, m_plugin->m_network_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.FreeNetwork") {
+				this->invoke_plugin_handler(&network::driver::free_network, m_plugin->m_network_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.CreateEndpoint") {
+				this->invoke_plugin_handler(&network::driver::create_endpoint, m_plugin->m_network_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.DeleteEndpoint") {
+				this->invoke_plugin_handler(&network::driver::delete_endpoint, m_plugin->m_network_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.EndpointOperInfo") {
+				this->invoke_plugin_handler(&network::driver::endpoint_info, m_plugin->m_network_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.Join") {
+				this->invoke_plugin_handler(&network::driver::join, m_plugin->m_network_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.Leave") {
+				this->invoke_plugin_handler(&network::driver::leave, m_plugin->m_network_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.DiscoverNew") {
+				this->invoke_plugin_handler(&network::driver::discover_new, m_plugin->m_network_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.DiscoverDelete") {
+				this->invoke_plugin_handler(&network::driver::discover_delete, m_plugin->m_network_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.ProgramExternalConnectivity") {
+				this->invoke_plugin_handler(&network::driver::program_external_connectivity, m_plugin->m_network_driver);
+			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.RevokeExternalConnectivity") {
+				this->invoke_plugin_handler(&network::driver::revoke_external_connectivity, m_plugin->m_network_driver);
+			} else if (m_plugin->m_ipam_driver && m_url == "/IpamDriver.GetCapabilities") {
+				this->invoke_plugin_handler(&ipam::driver::capabilities, m_plugin->m_ipam_driver);
+			} else if (m_plugin->m_ipam_driver && m_url == "/IpamDriver.GetDefaultAddressSpaces") {
+				this->invoke_plugin_handler(&ipam::driver::default_address_spaces, m_plugin->m_ipam_driver);
+			} else if (m_plugin->m_ipam_driver && m_url == "/IpamDriver.RequestPool") {
+				this->invoke_plugin_handler(&ipam::driver::request_pool, m_plugin->m_ipam_driver);
+			} else if (m_plugin->m_ipam_driver && m_url == "/IpamDriver.ReleasePool") {
+				this->invoke_plugin_handler(&ipam::driver::release_pool, m_plugin->m_ipam_driver);
+			} else if (m_plugin->m_ipam_driver && m_url == "/IpamDriver.RequestAddress") {
+				this->invoke_plugin_handler(&ipam::driver::request_address, m_plugin->m_ipam_driver);
+			} else if (m_plugin->m_ipam_driver && m_url == "/IpamDriver.ReleaseAddress") {
+				this->invoke_plugin_handler(&ipam::driver::release_address, m_plugin->m_ipam_driver);
 			} else {
 				// TODO: Handle Message
 				response_status(404);
@@ -94,7 +137,7 @@ namespace docker_plugin {
 	};
 
 	plugin::plugin(const std::string& driver_name, logger* log)
-		: m_logger{log}, m_server{nullptr}, m_volume_driver{nullptr} {
+		: m_logger{log}, m_server{nullptr}, m_volume_driver{nullptr}, m_network_driver{nullptr}, m_ipam_driver{nullptr} {
 		// Silence the dinos
 		signal(SIGPIPE, SIG_IGN);
 		m_server = std::make_unique<http_server<plugin_http_connection, plugin*>>(m_logger, this);

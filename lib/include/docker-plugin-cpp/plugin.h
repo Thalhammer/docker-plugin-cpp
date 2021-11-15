@@ -8,6 +8,12 @@ namespace docker_plugin {
 	namespace volume {
 		struct driver;
 	}
+	namespace network {
+		struct driver;
+	}
+	namespace ipam {
+		struct driver;
+	}
 	class uds_server;
 	class plugin_http_connection;
 	struct logger;
@@ -26,6 +32,9 @@ namespace docker_plugin {
 		logger* m_logger;
 		std::unique_ptr<uds_server> m_server;
 		volume::driver* m_volume_driver;
+		network::driver* m_network_driver;
+		ipam::driver* m_ipam_driver;
+
 		friend class plugin_http_connection;
 
 	public:
@@ -44,6 +53,22 @@ namespace docker_plugin {
          * Plugin.Activate and forward all plugin related calls to the handler.
          */
 		void register_volume(volume::driver& drv) noexcept { m_volume_driver = &drv; }
+
+		/**
+         * \brief Register a network driver for this plugin.
+         * \param drv Reference to the network implementation. Needs to stay valid as long as run() is active.
+         * This causes the plugin to announce support for network handling in
+         * Plugin.Activate and forward all plugin related calls to the handler.
+         */
+		void register_network(network::driver& drv) noexcept { m_network_driver = &drv; }
+
+		/**
+         * \brief Register a ipam driver for this plugin.
+         * \param drv Reference to the ipam implementation. Needs to stay valid as long as run() is active.
+         * This causes the plugin to announce support for ipam handling in
+         * Plugin.Activate and forward all plugin related calls to the handler.
+         */
+		void register_ipam(ipam::driver& drv) noexcept { m_ipam_driver = &drv; }
 
 		/**
          * \brief Run the mainloop with the specified timeout.
