@@ -17,7 +17,6 @@ namespace docker_plugin {
 		plugin_http_connection& operator=(plugin_http_connection&& other) = delete;
 
 		plugin* m_plugin;
-		logger* m_logger;
 		std::string m_url;
 
 		template <typename TObject, typename TRequest, typename TResponse>
@@ -46,12 +45,13 @@ namespace docker_plugin {
 			activate_response resp;
 			if (m_plugin->m_volume_driver != nullptr) resp.implements.insert("VolumeDriver");
 			if (m_plugin->m_network_driver != nullptr) resp.implements.insert("NetworkDriver");
+            if (m_plugin->m_ipam_driver != nullptr) resp.implements.insert("IpamDriver");
 			return resp;
 		}
 
 	public:
 		plugin_http_connection(int socket, plugin* p)
-			: http_connection{socket}, m_plugin{p}, m_logger{p->m_logger}, m_url{} {}
+			: http_connection{socket}, m_plugin{p}, m_url{} {}
 		int on_message_begin() noexcept override {
 			buffer_headers();
 			buffer_body();
@@ -59,7 +59,7 @@ namespace docker_plugin {
 		}
 		int on_url(llhttp_method method, const std::string& url) noexcept override {
 			if (method != HTTP_POST) {
-				if (m_logger) m_logger->log(logger::level::warning, "Get a non post request for '" + url + "'");
+				if (m_plugin->m_logger) m_plugin->m_logger->log(logger::level::warning, "Get a non post request for '" + url + "'");
 				response_status(405);
 				end("Method not allowed");
 				return 1;
@@ -68,7 +68,7 @@ namespace docker_plugin {
 			return 0;
 		}
 		int on_message_complete() noexcept override {
-			if (m_logger) m_logger->log(logger::level::info, m_url);
+			if (m_plugin->m_logger) m_plugin->m_logger->log(logger::level::info, m_url);
 			if (m_url == "/Plugin.Activate") {
 				this->invoke_plugin_handler(&plugin_http_connection::plugin_activate, this);
 			} else if (m_plugin->m_volume_driver && m_url == "/VolumeDriver.Create") {
