@@ -1,6 +1,7 @@
 #pragma once
 #include <chrono>
 #include <memory>
+#include <string>
 #include <set>
 
 namespace docker_plugin {
@@ -16,7 +17,7 @@ namespace docker_plugin {
 	}
 	class uds_server;
 	class plugin_http_connection;
-	struct logger;
+	class logger;
 
 	/**
      * \brief Main plugin class

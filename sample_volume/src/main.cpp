@@ -2,6 +2,7 @@
 #include <docker-plugin-cpp/logger.h>
 #include <iostream>
 #include <algorithm>
+#include <csignal>
 #include "util.h"
 
 using namespace docker_plugin::volume;
@@ -80,6 +81,10 @@ int main() {
     }
     docker_plugin::plugin plugin{"sample", &logger};
     plugin.register_volume(my_plugin);
-    while(true) plugin.run();
+    static bool should_exit = false;
+    signal(SIGINT, [](int) { should_exit = true; });
+    signal(SIGTERM, [](int) { should_exit = true; });
+    while(!should_exit) plugin.run();
+    logger.log(logger::level::info, "Exit");
     return 0;
 }

@@ -1,15 +1,14 @@
 #pragma once
-
-#pragma once
 #include <chrono>
 #include <memory>
-#include <set>
+#include <string>
 
 namespace docker_plugin {
 	/**
      * \brief Interface to plug a logger into the framework
      */
-	struct logger {
+	class logger {
+	public:
 		enum class level : int {
 			error = 0,
 			warning = 1,

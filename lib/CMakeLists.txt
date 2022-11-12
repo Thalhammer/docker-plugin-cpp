@@ -15,3 +15,8 @@ target_include_directories(docker-plugin-cpp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/
 target_compile_features(docker-plugin-cpp PUBLIC cxx_std_11)
 target_compile_options(docker-plugin-cpp PRIVATE -Wall -Wextra -Werror -Weffc++ -Wold-style-cast)
 target_compile_definitions(docker-plugin-cpp PRIVATE -DPICOJSON_USE_INT64)
+if(DPCPP_WITH_ASAN)
+    message(STATUS "Building with asan enabled")
+    target_compile_options(docker-plugin-cpp PRIVATE -fsanitize=address)
+	target_link_libraries(docker-plugin-cpp PRIVATE -fsanitize=address)
+endif()
