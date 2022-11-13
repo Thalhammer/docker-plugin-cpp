@@ -21,7 +21,11 @@ namespace docker_plugin {
 
 		template <typename TObject, typename TRequest, typename TResponse>
 		void invoke_plugin_handler(TResponse (TObject::*fn)(const TRequest&), TObject* obj) {
-			response_headers().set("Content-Type", "application/vnd.docker.plugins.v1.1+json");
+			response_headers().set("content-type", "application/vnd.docker.plugins.v1.1+json");
+			if (!obj) {
+				response_status(404);
+				return end("Not found");
+			}
 			std::string response;
 			try {
 				auto req = from_json<TRequest>(body());
@@ -38,14 +42,14 @@ namespace docker_plugin {
 				response_status(500);
 				response = to_json<error_response>({0, e.what()});
 			}
-			end(response);
+			return end(response);
 		}
 
 		activate_response plugin_activate(const empty_type&) {
 			activate_response resp;
 			if (m_plugin->m_volume_driver != nullptr) resp.implements.insert("VolumeDriver");
 			if (m_plugin->m_network_driver != nullptr) resp.implements.insert("NetworkDriver");
-            if (m_plugin->m_ipam_driver != nullptr) resp.implements.insert("IpamDriver");
+			if (m_plugin->m_ipam_driver != nullptr) resp.implements.insert("IpamDriver");
 			return resp;
 		}
 
@@ -71,61 +75,61 @@ namespace docker_plugin {
 			if (m_plugin->m_logger) m_plugin->m_logger->log(logger::level::info, m_url);
 			if (m_url == "/Plugin.Activate") {
 				this->invoke_plugin_handler(&plugin_http_connection::plugin_activate, this);
-			} else if (m_plugin->m_volume_driver && m_url == "/VolumeDriver.Create") {
+			} else if (m_url == "/VolumeDriver.Create") {
 				this->invoke_plugin_handler(&volume::driver::create, m_plugin->m_volume_driver);
-			} else if (m_plugin->m_volume_driver && m_url == "/VolumeDriver.Remove") {
+			} else if (m_url == "/VolumeDriver.Remove") {
 				this->invoke_plugin_handler(&volume::driver::remove, m_plugin->m_volume_driver);
-			} else if (m_plugin->m_volume_driver && m_url == "/VolumeDriver.Mount") {
+			} else if (m_url == "/VolumeDriver.Mount") {
 				this->invoke_plugin_handler(&volume::driver::mount, m_plugin->m_volume_driver);
-			} else if (m_plugin->m_volume_driver && m_url == "/VolumeDriver.Path") {
+			} else if (m_url == "/VolumeDriver.Path") {
 				this->invoke_plugin_handler(&volume::driver::path, m_plugin->m_volume_driver);
-			} else if (m_plugin->m_volume_driver && m_url == "/VolumeDriver.Unmount") {
+			} else if (m_url == "/VolumeDriver.Unmount") {
 				this->invoke_plugin_handler(&volume::driver::unmount, m_plugin->m_volume_driver);
-			} else if (m_plugin->m_volume_driver && m_url == "/VolumeDriver.Get") {
+			} else if (m_url == "/VolumeDriver.Get") {
 				this->invoke_plugin_handler(&volume::driver::get, m_plugin->m_volume_driver);
-			} else if (m_plugin->m_volume_driver && m_url == "/VolumeDriver.List") {
+			} else if (m_url == "/VolumeDriver.List") {
 				this->invoke_plugin_handler(&volume::driver::list, m_plugin->m_volume_driver);
-			} else if (m_plugin->m_volume_driver && m_url == "/VolumeDriver.Capabilities") {
+			} else if (m_url == "/VolumeDriver.Capabilities") {
 				this->invoke_plugin_handler(&volume::driver::capabilities, m_plugin->m_volume_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.GetCapabilities") {
+			} else if (m_url == "/NetworkDriver.GetCapabilities") {
 				this->invoke_plugin_handler(&network::driver::capabilities, m_plugin->m_network_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.CreateNetwork") {
+			} else if (m_url == "/NetworkDriver.CreateNetwork") {
 				this->invoke_plugin_handler(&network::driver::create_network, m_plugin->m_network_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.AllocateNetwork") {
+			} else if (m_url == "/NetworkDriver.AllocateNetwork") {
 				this->invoke_plugin_handler(&network::driver::allocate_network, m_plugin->m_network_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.DeleteNetwork") {
+			} else if (m_url == "/NetworkDriver.DeleteNetwork") {
 				this->invoke_plugin_handler(&network::driver::delete_network, m_plugin->m_network_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.FreeNetwork") {
+			} else if (m_url == "/NetworkDriver.FreeNetwork") {
 				this->invoke_plugin_handler(&network::driver::free_network, m_plugin->m_network_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.CreateEndpoint") {
+			} else if (m_url == "/NetworkDriver.CreateEndpoint") {
 				this->invoke_plugin_handler(&network::driver::create_endpoint, m_plugin->m_network_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.DeleteEndpoint") {
+			} else if (m_url == "/NetworkDriver.DeleteEndpoint") {
 				this->invoke_plugin_handler(&network::driver::delete_endpoint, m_plugin->m_network_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.EndpointOperInfo") {
+			} else if (m_url == "/NetworkDriver.EndpointOperInfo") {
 				this->invoke_plugin_handler(&network::driver::endpoint_info, m_plugin->m_network_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.Join") {
+			} else if (m_url == "/NetworkDriver.Join") {
 				this->invoke_plugin_handler(&network::driver::join, m_plugin->m_network_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.Leave") {
+			} else if (m_url == "/NetworkDriver.Leave") {
 				this->invoke_plugin_handler(&network::driver::leave, m_plugin->m_network_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.DiscoverNew") {
+			} else if (m_url == "/NetworkDriver.DiscoverNew") {
 				this->invoke_plugin_handler(&network::driver::discover_new, m_plugin->m_network_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.DiscoverDelete") {
+			} else if (m_url == "/NetworkDriver.DiscoverDelete") {
 				this->invoke_plugin_handler(&network::driver::discover_delete, m_plugin->m_network_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.ProgramExternalConnectivity") {
+			} else if (m_url == "/NetworkDriver.ProgramExternalConnectivity") {
 				this->invoke_plugin_handler(&network::driver::program_external_connectivity, m_plugin->m_network_driver);
-			} else if (m_plugin->m_network_driver && m_url == "/NetworkDriver.RevokeExternalConnectivity") {
+			} else if (m_url == "/NetworkDriver.RevokeExternalConnectivity") {
 				this->invoke_plugin_handler(&network::driver::revoke_external_connectivity, m_plugin->m_network_driver);
-			} else if (m_plugin->m_ipam_driver && m_url == "/IpamDriver.GetCapabilities") {
+			} else if (m_url == "/IpamDriver.GetCapabilities") {
 				this->invoke_plugin_handler(&ipam::driver::capabilities, m_plugin->m_ipam_driver);
-			} else if (m_plugin->m_ipam_driver && m_url == "/IpamDriver.GetDefaultAddressSpaces") {
+			} else if (m_url == "/IpamDriver.GetDefaultAddressSpaces") {
 				this->invoke_plugin_handler(&ipam::driver::default_address_spaces, m_plugin->m_ipam_driver);
-			} else if (m_plugin->m_ipam_driver && m_url == "/IpamDriver.RequestPool") {
+			} else if (m_url == "/IpamDriver.RequestPool") {
 				this->invoke_plugin_handler(&ipam::driver::request_pool, m_plugin->m_ipam_driver);
-			} else if (m_plugin->m_ipam_driver && m_url == "/IpamDriver.ReleasePool") {
+			} else if (m_url == "/IpamDriver.ReleasePool") {
 				this->invoke_plugin_handler(&ipam::driver::release_pool, m_plugin->m_ipam_driver);
-			} else if (m_plugin->m_ipam_driver && m_url == "/IpamDriver.RequestAddress") {
+			} else if (m_url == "/IpamDriver.RequestAddress") {
 				this->invoke_plugin_handler(&ipam::driver::request_address, m_plugin->m_ipam_driver);
-			} else if (m_plugin->m_ipam_driver && m_url == "/IpamDriver.ReleaseAddress") {
+			} else if (m_url == "/IpamDriver.ReleaseAddress") {
 				this->invoke_plugin_handler(&ipam::driver::release_address, m_plugin->m_ipam_driver);
 			} else {
 				// TODO: Handle Message

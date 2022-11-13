@@ -2,18 +2,24 @@
 #include "uds_server.h"
 #include <algorithm>
 #include <llhttp.h>
-#include <unordered_map>
+#include <map>
 
 namespace docker_plugin {
+	struct case_insensitive_less {
+		bool operator()(const std::string& lhs, const std::string& rhs) const {
+			return std::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
+												[](const char c1, const char c2) { return tolower(c1) < tolower(c2); });
+		}
+	};
+
 	class http_header_set {
 	public:
-		using collection_type = std::unordered_multimap<std::string, std::string>;
+		using collection_type = std::multimap<std::string, std::string, case_insensitive_less>;
 
 		collection_type& raw() noexcept { return m_headers; }
 		const collection_type& raw() const noexcept { return m_headers; }
 
 		void set(std::string key, std::string value, bool replace = true) {
-			std::transform(key.begin(), key.end(), key.begin(), ::tolower);
 			if (replace) m_headers.erase(key);
 			m_headers.emplace(std::move(key), std::move(value));
 		}
@@ -32,13 +38,14 @@ namespace docker_plugin {
 	private:
 		collection_type m_headers{};
 	};
+
 	class http_connection : public uds_connection {
 		llhttp_t m_parser{};
 		std::string m_buffer{};
 		bool m_buffer_body{false};
 		bool m_buffer_headers{false};
 		http_header_set m_headers{};
-		std::unordered_multimap<std::string, std::string>::iterator m_current_header{};
+		http_header_set::collection_type::iterator m_current_header{};
 
 		int m_response_status{200};
 		std::string m_response_message{"OK"};
@@ -46,8 +53,7 @@ namespace docker_plugin {
 		bool m_response_headers_sent{false};
 		bool m_response_chunked{false};
 
-		static llhttp_settings_t get_settings() noexcept;
-		static llhttp_settings_t g_settings;
+		static const llhttp_settings_t& get_settings() noexcept;
 
 	protected:
 		void on_read(const void* data, size_t len) override;
@@ -76,8 +82,8 @@ namespace docker_plugin {
 		virtual int on_body(const void*, size_t) noexcept { return 0; }
 		virtual int on_message_complete() noexcept { return 0; }
 
-		static void on_connect(std::shared_ptr<http_connection>) {}
-		static void on_disconnect(std::shared_ptr<http_connection>) {}
+		static void on_connect(const std::shared_ptr<http_connection>&) {}
+		static void on_disconnect(const std::shared_ptr<http_connection>&) {}
 	};
 
 	template <typename TConnection = http_connection, typename... TExtra>
@@ -89,8 +95,8 @@ namespace docker_plugin {
 		}
 
 	protected:
-		void on_connect(std::shared_ptr<uds_connection> con) override { TConnection::on_connect(std::static_pointer_cast<TConnection>(con)); }
-		void on_disconnect(std::shared_ptr<uds_connection> con) override { TConnection::on_disconnect(std::static_pointer_cast<TConnection>(con)); }
+		void on_connect(const std::shared_ptr<uds_connection>& con) override { TConnection::on_connect(std::static_pointer_cast<TConnection>(con)); }
+		void on_disconnect(const std::shared_ptr<uds_connection>& con) override { TConnection::on_disconnect(std::static_pointer_cast<TConnection>(con)); }
 		std::shared_ptr<uds_connection> create_connection(int socket) override {
 			return create_connection_with_extra_args(socket, std::index_sequence_for<TExtra...>());
 		}

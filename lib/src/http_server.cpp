@@ -1,74 +1,76 @@
 #include "http_server.h"
+#include "llhttp.h"
 #include <algorithm>
 
 namespace docker_plugin {
-	llhttp_settings_t http_connection::get_settings() noexcept {
-		llhttp_settings_t s{};
-		llhttp_settings_init(&s);
-		s.on_message_begin = [](llhttp_t* s) -> int {
-			static_cast<http_connection*>(s->data)->m_buffer.clear();
-			return static_cast<http_connection*>(s->data)->on_message_begin();
-		};
-		s.on_url = [](llhttp_t* s, const char* at, size_t length) -> int {
-			static_cast<http_connection*>(s->data)->m_buffer.append(at, length);
-			return 0;
-		};
-		s.on_url_complete = [](llhttp_t* s) -> int {
-			auto res = static_cast<http_connection*>(s->data)->on_url(static_cast<llhttp_method>(s->method), static_cast<http_connection*>(s->data)->m_buffer);
-			static_cast<http_connection*>(s->data)->m_buffer.clear();
-			return res;
-		};
-		s.on_header_field = [](llhttp_t* s, const char* at, size_t length) -> int {
-			static_cast<http_connection*>(s->data)->m_buffer.append(at, length);
-			return 0;
-		};
-		s.on_header_field_complete = [](llhttp_t* s) -> int {
-			auto o = static_cast<http_connection*>(s->data);
-			auto res = o->on_header_field(o->m_buffer);
-			if (o->m_buffer_headers) {
-				std::transform(o->m_buffer.begin(), o->m_buffer.end(), o->m_buffer.begin(), ::tolower);
-				o->m_current_header = o->m_headers.raw().emplace(std::move(o->m_buffer), "");
-			}
-			o->m_buffer.clear();
-			return res;
-		};
-		s.on_header_value = [](llhttp_t* s, const char* at, size_t length) -> int {
-			static_cast<http_connection*>(s->data)->m_buffer.append(at, length);
-			return 0;
-		};
-		s.on_header_value_complete = [](llhttp_t* s) -> int {
-			auto o = static_cast<http_connection*>(s->data);
-			auto res = o->on_header_value(o->m_buffer);
-			if (o->m_buffer_headers && o->m_current_header != o->m_headers.raw().end())
-				o->m_current_header->second = o->m_buffer;
-			o->m_buffer.clear();
-			return res;
-		};
-		s.on_headers_complete = [](llhttp_t* s) -> int {
-			static_cast<http_connection*>(s->data)->m_buffer.clear();
-			return static_cast<http_connection*>(s->data)->on_headers_complete();
-		};
-		s.on_message_complete = [](llhttp_t* s) -> int {
-			auto o = static_cast<http_connection*>(s->data);
-			if (o->m_buffer_body) {
-				auto res = o->on_body(o->m_buffer.data(), o->m_buffer.size());
-				if (res != 0) return res;
-			} else
-				o->m_buffer.clear();
-			return o->on_message_complete();
-		};
-		s.on_body = [](llhttp_t* s, const char* at, size_t length) -> int {
-			auto o = static_cast<http_connection*>(s->data);
-			if (o->m_buffer_body) {
-				o->m_buffer.append(at, length);
+	const llhttp_settings_t& http_connection::get_settings() noexcept {
+		static llhttp_settings_t instance = []() {
+			llhttp_settings_t s{};
+			llhttp_settings_init(&s);
+			s.on_message_begin = [](llhttp_t* s) -> int {
+				static_cast<http_connection*>(s->data)->m_buffer.clear();
+				return static_cast<http_connection*>(s->data)->on_message_begin();
+			};
+			s.on_url = [](llhttp_t* s, const char* at, size_t length) -> int {
+				static_cast<http_connection*>(s->data)->m_buffer.append(at, length);
 				return 0;
-			} else
-				return o->on_body(at, length);
-		};
-		return s;
+			};
+			s.on_url_complete = [](llhttp_t* s) -> int {
+				auto res = static_cast<http_connection*>(s->data)->on_url(static_cast<llhttp_method>(s->method), static_cast<http_connection*>(s->data)->m_buffer);
+				static_cast<http_connection*>(s->data)->m_buffer.clear();
+				return res;
+			};
+			s.on_header_field = [](llhttp_t* s, const char* at, size_t length) -> int {
+				static_cast<http_connection*>(s->data)->m_buffer.append(at, length);
+				return 0;
+			};
+			s.on_header_field_complete = [](llhttp_t* s) -> int {
+				auto o = static_cast<http_connection*>(s->data);
+				auto res = o->on_header_field(o->m_buffer);
+				if (o->m_buffer_headers) {
+					std::transform(o->m_buffer.begin(), o->m_buffer.end(), o->m_buffer.begin(), ::tolower);
+					o->m_current_header = o->m_headers.raw().emplace(std::move(o->m_buffer), "");
+				}
+				o->m_buffer.clear();
+				return res;
+			};
+			s.on_header_value = [](llhttp_t* s, const char* at, size_t length) -> int {
+				static_cast<http_connection*>(s->data)->m_buffer.append(at, length);
+				return 0;
+			};
+			s.on_header_value_complete = [](llhttp_t* s) -> int {
+				auto o = static_cast<http_connection*>(s->data);
+				auto res = o->on_header_value(o->m_buffer);
+				if (o->m_buffer_headers && o->m_current_header != o->m_headers.raw().end())
+					o->m_current_header->second = o->m_buffer;
+				o->m_buffer.clear();
+				return res;
+			};
+			s.on_headers_complete = [](llhttp_t* s) -> int {
+				static_cast<http_connection*>(s->data)->m_buffer.clear();
+				return static_cast<http_connection*>(s->data)->on_headers_complete();
+			};
+			s.on_message_complete = [](llhttp_t* s) -> int {
+				auto o = static_cast<http_connection*>(s->data);
+				if (o->m_buffer_body) {
+					auto res = o->on_body(o->m_buffer.data(), o->m_buffer.size());
+					if (res != 0) return res;
+				} else
+					o->m_buffer.clear();
+				return o->on_message_complete();
+			};
+			s.on_body = [](llhttp_t* s, const char* at, size_t length) -> int {
+				auto o = static_cast<http_connection*>(s->data);
+				if (o->m_buffer_body) {
+					o->m_buffer.append(at, length);
+					return 0;
+				} else
+					return o->on_body(at, length);
+			};
+			return s;
+		}();
+		return instance;
 	}
-
-	llhttp_settings_t http_connection::g_settings = http_connection::get_settings();
 
 	namespace {
 		static const std::pair<int, const char*> http_status_map[] = {
@@ -148,7 +150,7 @@ namespace docker_plugin {
 
 	http_connection::http_connection(int sock)
 		: uds_connection(sock) {
-		llhttp_init(&m_parser, HTTP_REQUEST, &g_settings);
+		llhttp_init(&m_parser, HTTP_REQUEST, &get_settings());
 		m_parser.data = this;
 	}
 

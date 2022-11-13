@@ -9,6 +9,7 @@
 namespace docker_plugin {
 	class uds_server;
 	class logger;
+	enum class log_level;
 
 	class uds_connection {
 		uds_connection(const uds_connection&) = delete;
@@ -18,11 +19,11 @@ namespace docker_plugin {
 
 		int m_socket;
 		uds_server* m_server;
-		int get_fd() const noexcept { return m_socket; }
-		bool handle_io();
 		friend class uds_server;
 
 	protected:
+		int get_fd() const noexcept { return m_socket; }
+
 		size_t write(const void* data, size_t len);
 		void close();
 		virtual void on_read(const void* data, size_t len) = 0;
@@ -43,9 +44,12 @@ namespace docker_plugin {
 		std::vector<std::shared_ptr<uds_connection>> m_connections{};
 		friend class uds_connection;
 
+		void log(log_level lvl, const std::string& msg);
+		bool handle_io(uds_connection& con);
+
 	protected:
-		virtual void on_connect(std::shared_ptr<uds_connection>) = 0;
-		virtual void on_disconnect(std::shared_ptr<uds_connection>) = 0;
+		virtual void on_connect(const std::shared_ptr<uds_connection>&) = 0;
+		virtual void on_disconnect(const std::shared_ptr<uds_connection>&) = 0;
 		virtual std::shared_ptr<uds_connection> create_connection(int socket) = 0;
 
 	public:

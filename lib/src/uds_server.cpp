@@ -14,19 +14,6 @@ namespace docker_plugin {
 		if (m_socket >= 0) ::close(m_socket);
 	}
 
-	bool uds_connection::handle_io() {
-		char buffer[4096];
-		int res = recv(m_socket, buffer, sizeof(buffer), MSG_DONTWAIT);
-		if (res == 0) return true;
-		if (res < 0) {
-			if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) return false;
-			return true;
-		}
-		if (m_server->m_logger) m_server->m_logger->log(logger::level::debug, "[" + std::to_string(m_socket) + "] in " + std::to_string(res) + " bytes");
-		this->on_read(buffer, res);
-		return m_socket < 0;
-	}
-
 	void uds_connection::close() {
 		if (m_socket >= 0) ::close(m_socket);
 		m_socket = -1;
@@ -105,9 +92,14 @@ namespace docker_plugin {
 				auto con = this->create_connection(new_sock);
 				if (con) {
 					con->m_server = this;
-					m_connections.push_back(con);
-					this->on_connect(m_connections.back());
-					if (m_logger) m_logger->log(logger::level::debug, "New socket " + std::to_string(new_sock));
+					this->on_connect(con);
+					log(logger::level::debug, "New socket " + std::to_string(new_sock));
+					bool closed = handle_io(*con);
+					if (closed) {
+						log(logger::level::debug, "Closed socket " + std::to_string(new_sock));
+						this->on_disconnect(con);
+					} else
+						m_connections.emplace_back(con);
 				} else
 					::close(new_sock);
 			}
@@ -115,9 +107,9 @@ namespace docker_plugin {
 		for (auto it = m_connections.begin(); it != m_connections.end();) {
 			auto fd = (*it)->get_fd();
 			if (FD_ISSET(fd, &set)) {
-				auto closed = (*it)->handle_io();
+				auto closed = handle_io(*it->get());
 				if (closed) {
-					if (m_logger) m_logger->log(logger::level::debug, "Closed socket " + std::to_string(fd));
+					log(logger::level::debug, "Closed socket " + std::to_string(fd));
 					this->on_disconnect(*it);
 					it = m_connections.erase(it);
 					continue;
@@ -126,6 +118,24 @@ namespace docker_plugin {
 			it++;
 		}
 		return 0;
+	}
+
+	void uds_server::log(log_level lvl, const std::string& msg) {
+		if (m_logger) m_logger->log(lvl, msg);
+	}
+
+	bool uds_server::handle_io(uds_connection& con) {
+		char buffer[32 * 1024];
+		int res = recv(con.get_fd(), buffer, sizeof(buffer), MSG_DONTWAIT);
+		if (res == 0) return true;
+		if (res < 0) {
+			if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) return false;
+			con.close();
+			return true;
+		}
+		log(logger::level::debug, "[" + std::to_string(con.get_fd()) + "] in " + std::to_string(res) + " bytes");
+		con.on_read(buffer, res);
+		return con.get_fd() < 0;
 	}
 
 } // namespace docker_plugin
